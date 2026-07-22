@@ -1,0 +1,4 @@
+import { describe,expect,it } from "vitest";
+import { countdownParts,formatCambodiaTime,formatSourceDrawTime,parseIso } from "@/lib/time";
+describe("time",()=>{it("normalizes ISO and rejects invalid values",()=>{expect(parseIso("2026-07-21T08:00:00Z")).toBe("2026-07-21T08:00:00.000Z");expect(parseIso("bad")).toBeNull()});it("formats UTC+7",()=>expect(formatCambodiaTime("2026-07-21T08:00:00.000Z")).toContain("15:00:00"));it("counts down and floors at zero",()=>{expect(countdownParts("2026-07-21T08:01:05Z",Date.parse("2026-07-21T08:00:00Z"))).toMatchObject({minutes:1,seconds:5});expect(countdownParts("2026-07-21T07:00:00Z",Date.parse("2026-07-21T08:00:00Z"))?.total).toBe(0)})});
+it("corrects the verified one-hour source offset for display",()=>{expect(formatSourceDrawTime(null,"2026-07-21T14:32:00.000Z")).toBe("20:32:00")});

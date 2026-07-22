@@ -1,0 +1,6 @@
+import { ece, entropy } from "./scoring";
+import type { WalkForwardRecord } from "../types";
+const mean=(xs:number[])=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:0;
+const group=(rows:WalkForwardRecord[],key:(r:WalkForwardRecord)=>string)=>Object.fromEntries([...new Set(rows.map(key))].map(k=>[k,basic(rows.filter(r=>key(r)===k))]));
+const basic=(rows:WalkForwardRecord[])=>({count:rows.length,top1Rate:mean(rows.map(r=>+r.top1Hit)),top3Rate:mean(rows.map(r=>+r.top3Hit)),top5Rate:mean(rows.map(r=>+r.top5Hit)),meanAbsoluteError:mean(rows.map(r=>r.absoluteError)),brierScore:mean(rows.map(r=>r.brierScore)),logLoss:mean(rows.map(r=>r.logLoss))});
+export function summarize(rows:readonly WalkForwardRecord[]){return Object.fromEntries([...new Set(rows.map(r=>r.modelName))].map(name=>{const modelRows=rows.filter(r=>r.modelName===name);return [name,{...basic(modelRows),ece:ece(modelRows),meanEntropy:mean(modelRows.map(r=>entropy(r.distribution))),bySumRange:group(modelRows,r=>r.actualSum<=9?"0-9":r.actualSum<=18?"10-18":"19-27"),byBigSmall:group(modelRows,r=>r.actualSum>=14?"big":"small"),byOddEven:group(modelRows,r=>r.actualSum%2?"odd":"even"),byVolatility:group(modelRows,r=>r.volatilityState),bySampleStage:group(modelRows,r=>r.sampleStage)}] }))}

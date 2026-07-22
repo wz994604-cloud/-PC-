@@ -1,0 +1,13 @@
+import { describe,expect,it } from "vitest";
+import { normalizeSource, parsePc28Html } from "@/lib/source/adapter";
+const fixture={success:true,data:{issue:"102",num1:9,num2:0,num3:5,sum:99,bigSmall:"小",oddEven:"单",openTime:"2026-07-21T08:00:00Z",nextOpenTime:"2026-07-21T08:03:30Z",history:[{issue:"101",num1:0,num2:0,num3:0,openTime:"2026-07-21T07:56:30Z"},{issue:"102",num1:9,num2:0,num3:5,openTime:"2026-07-21T08:00:00Z"}]}};
+const now=Date.parse("2026-07-21T08:01:00Z");
+describe("source adapter",()=>{it("recalculates derived fields, sorts and removes duplicates",()=>{const result=normalizeSource(fixture,now);expect(result.data.latest).toMatchObject({sum:14,bigSmall:"大",oddEven:"双"});expect(result.data.history.map(x=>x.issue)).toEqual(["102","101"]);expect(result.data.nextOpenTime).toBe("2026-07-21T08:03:30.000Z")});it("does not fabricate a stale next time",()=>{const value=structuredClone(fixture);value.data.nextOpenTime="2026-07-21T07:00:00Z";const result=normalizeSource(value,now);expect(result.data.nextOpenTime).toBeNull();expect(result.data.rawNextOpenTime).toBe("2026-07-21T07:00:00Z")});it("keeps contradictory open time raw but does not display it",()=>{const value=structuredClone(fixture);value.data.openTime="2026-07-21T09:00:00Z";const result=normalizeSource(value,now);expect(result.data.latest.openTime).toBeNull();expect(result.data.latest.rawOpenTime).toBe("2026-07-21T09:00:00Z");expect(result.warnings[0]).toContain("时区验证")});it("rejects missing issue",()=>expect(()=>normalizeSource({success:true,data:{num1:1,num2:2,num3:3,history:[]}},now)).toThrow())});
+
+it("parses the real HTML source without calling this app recursively",()=>{
+  const html=`<div data-nextts="1784651850"></div><table><tr><td>3459897</td><td>1+7+6=14</td><td><span>14</span></td><td>杂六</td><td><span class="date-part">2026-07-22</span><span class="time-part">00:34:00</span></td></tr><tr><td>3459896</td><td>4+2+3=9</td><td><span>9</span></td><td>顺子</td><td><span class="date-part">2026-07-22</span><span class="time-part">00:30:30</span></td></tr></table>`;
+  const parsed=parsePc28Html(html) as typeof fixture;
+  expect(parsed.data).toMatchObject({issue:"3459897",num1:1,num2:7,num3:6,openTime:"2026-07-22T00:34:00+07:00"});
+  expect(parsed.data.history[0]).toMatchObject({issue:"3459896",num1:4,num2:2,num3:3});
+  expect(parsed.data.nextOpenTime).toBe("2026-07-21T16:37:30.000Z");
+});

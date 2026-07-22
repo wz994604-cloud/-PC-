@@ -1,0 +1,4 @@
+export const brier=(p:readonly number[],actual:number)=>p.reduce((total,value,index)=>total+(value-(index===actual?1:0))**2,0);
+export const logLoss=(p:readonly number[],actual:number,epsilon=1e-12)=>-Math.log(Math.max(epsilon,p[actual]??0));
+export const entropy=(p:readonly number[])=>-p.reduce((total,value)=>total+(value>0?value*Math.log(value):0),0);
+export function ece(records:readonly {confidence:number;top1Hit:boolean}[],bins=10){if(!records.length)return 0;let total=0;for(let b=0;b<bins;b++){const rows=records.filter(r=>r.confidence>=b/bins&&(b===bins-1?r.confidence<=1:r.confidence<(b+1)/bins));if(rows.length){const accuracy=rows.filter(r=>r.top1Hit).length/rows.length,confidence=rows.reduce((a,r)=>a+r.confidence,0)/rows.length;total+=rows.length/records.length*Math.abs(accuracy-confidence)}}return total}
