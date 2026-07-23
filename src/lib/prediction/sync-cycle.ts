@@ -4,6 +4,6 @@ import { runPredictionCycle, type PredictionCycleResult } from "./cycle";
 
 export async function syncPredictionCycle(): Promise<PredictionCycleResult> {
   const source = await fetchSource();
-  saveDraws(source.data.history);
+  await saveDraws(source.data.history);
   return runPredictionCycle();
 }

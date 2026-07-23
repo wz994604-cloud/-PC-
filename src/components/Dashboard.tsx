@@ -27,10 +27,19 @@ export function Dashboard() {
       const body = (await res.json()) as SourceResponse;
       if (!body.success) throw new Error(body.error.message);
       setResponse(body);
-      const predictionRes = await fetch("/api/prediction", { cache: "no-store", signal: controller.signal });
-      const predictionBody = (await predictionRes.json()) as PredictionResponse;
-      setPrediction(predictionBody.success && predictionBody.data?.modelVersion === "v0.1 Beta" ? predictionBody.data : null);
       setError(null);
+
+      const predictionController = new AbortController();
+      const predictionTimeout = window.setTimeout(() => predictionController.abort("timeout"), 12_000);
+      try {
+        const predictionRes = await fetch("/api/prediction", { cache: "no-store", signal: predictionController.signal });
+        const predictionBody = (await predictionRes.json()) as PredictionResponse;
+        setPrediction(predictionBody.success && predictionBody.data?.modelVersion === "v0.1 Beta" ? predictionBody.data : null);
+      } catch {
+        setPrediction(null);
+      } finally {
+        window.clearTimeout(predictionTimeout);
+      }
     } catch (cause) {
       if (controller.signal.reason === "timeout") setError("开奖数据请求超时");
       else if (!(cause instanceof DOMException && cause.name === "AbortError")) setError(cause instanceof Error ? cause.message : "数据加载失败");

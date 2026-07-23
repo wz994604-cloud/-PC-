@@ -21,7 +21,7 @@ describe("components",()=>{
   it("renders the static model sections with live draw data",async()=>{
     vi.stubGlobal("fetch",vi.fn(async()=>({json:async()=>response})));
     render(<Dashboard/>);
-    expect(await screen.findByRole("heading",{name:"模型参考结果"})).toBeInTheDocument();
+    expect(await screen.findByRole("heading",{name:"预测结果"})).toBeInTheDocument();
     expect(screen.getByRole("img",{name:"和值0到27概率分布"})).toBeInTheDocument();
     const analysis=screen.getByRole("button",{name:/分析依据/});
     expect(analysis).toHaveAttribute("aria-expanded","false");

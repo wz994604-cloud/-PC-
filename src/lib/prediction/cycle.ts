@@ -12,18 +12,19 @@ export type PredictionCycleResult = {
   prediction: PredictionHistoryRecord | null;
   predictionInserted: boolean;
   reconciledCount: number;
+  reconciled: Awaited<ReturnType<typeof reconcilePredictions>>;
 };
 
-export function runPredictionCycle(now = new Date().toISOString()): PredictionCycleResult {
+export async function runPredictionCycle(now = new Date().toISOString()): Promise<PredictionCycleResult> {
   try {
-    const reconciled = reconcilePredictions(now);
+    const reconciled = await reconcilePredictions(now);
     for (const result of reconciled) {
       logPredictionEvent("prediction.reconciled", result);
     }
 
-    const candidate = createPrediction(getDrawHistory(300));
+    const candidate = createPrediction(await getDrawHistory(300));
     if (!candidate) {
-      return { prediction: null, predictionInserted: false, reconciledCount: reconciled.length };
+      return { prediction: null, predictionInserted: false, reconciledCount: reconciled.length, reconciled };
     }
 
     logPredictionEvent("prediction.generated", {
@@ -33,20 +34,20 @@ export function runPredictionCycle(now = new Date().toISOString()): PredictionCy
       modelVersion: candidate.modelVersion,
     });
 
-    const existing = getPrediction(candidate.issue);
+    const existing = await getPrediction(candidate.issue);
     if (existing) {
       logPredictionEvent("prediction.save_skipped", { issue: candidate.issue, reason: "duplicate_issue" });
-      return { prediction: existing, predictionInserted: false, reconciledCount: reconciled.length };
+      return { prediction: existing, predictionInserted: false, reconciledCount: reconciled.length, reconciled };
     }
 
     try {
-      const saved = savePredictionOnce(candidate, now);
+      const saved = await savePredictionOnce(candidate, now);
       logPredictionEvent(saved.inserted ? "prediction.saved" : "prediction.save_skipped", {
         issue: candidate.issue,
         predictedAt: saved.record.predictedAt,
         ...(saved.inserted ? {} : { reason: "duplicate_issue_race" }),
       });
-      return { prediction: saved.record, predictionInserted: saved.inserted, reconciledCount: reconciled.length };
+      return { prediction: saved.record, predictionInserted: saved.inserted, reconciledCount: reconciled.length, reconciled };
     } catch (error) {
       logPredictionEvent("prediction.save_failed", { issue: candidate.issue, ...errorDetails(error) });
       throw error;
