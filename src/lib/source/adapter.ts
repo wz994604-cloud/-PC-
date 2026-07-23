@@ -6,22 +6,33 @@ import { SourceError } from "./errors";
 import { upstreamResponseSchema, type UpstreamResponse } from "./schema";
 
 type RawDraw = UpstreamResponse["data"]["history"][number];
+const SOURCE_CLOCK_OFFSET_MS = 60 * 60 * 1000;
 
-function normalizeDraw(raw: RawDraw, trustOpenTime: boolean): Draw {
+function normalizeOpenTime(value: string | null | undefined, now: number) {
+  const parsed = parseIso(value);
+  if (!parsed) return { value: null, corrected: false };
+  const timestamp = Date.parse(parsed);
+  if (timestamp <= now + 60_000) return { value: parsed, corrected: false };
+  const corrected = new Date(timestamp - SOURCE_CLOCK_OFFSET_MS).toISOString();
+  return Date.parse(corrected) <= now + 60_000
+    ? { value: corrected, corrected: true }
+    : { value: null, corrected: false };
+}
+
+function normalizeDraw(raw: RawDraw, now: number): Draw {
   const numbers: [number, number, number] = [raw.num1, raw.num2, raw.num3];
-  return { issue: raw.issue, numbers, ...calculateDraw(numbers), openTime: trustOpenTime ? parseIso(raw.openTime) : null, rawOpenTime: raw.openTime ?? null, pattern: getDrawPattern(numbers) };
+  return { issue: raw.issue, numbers, ...calculateDraw(numbers), openTime: normalizeOpenTime(raw.openTime, now).value, rawOpenTime: raw.openTime ?? null, pattern: getDrawPattern(numbers) };
 }
 
 export function normalizeSource(input: unknown, now = Date.now()): { data: DrawPayload; warnings: string[] } {
   const parsed = upstreamResponseSchema.safeParse(input);
   if (!parsed.success) throw new SourceError("INVALID_SOURCE_DATA", "上游开奖数据格式异常");
   const raw = parsed.data.data;
-  const parsedLatestOpenTime = parseIso(raw.openTime);
-  const latestOpenMs = parsedLatestOpenTime ? Date.parse(parsedLatestOpenTime) : NaN;
-  const trustOpenTime = Number.isFinite(latestOpenMs) && latestOpenMs <= now + 60_000;
-  const latest = normalizeDraw(raw, trustOpenTime);
+  const latestTime = normalizeOpenTime(raw.openTime, now);
+  const trustOpenTime = Boolean(latestTime.value);
+  const latest = normalizeDraw(raw, now);
   const seen = new Set<string>();
-  const history = [latest, ...raw.history.map((draw) => normalizeDraw(draw, trustOpenTime))]
+  const history = [latest, ...raw.history.map((draw) => normalizeDraw(draw, now))]
     .filter((draw) => !seen.has(draw.issue) && seen.add(draw.issue))
     .sort((a, b) => Number(b.issue) - Number(a.issue));
   const warnings: string[] = [];

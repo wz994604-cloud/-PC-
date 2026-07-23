@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Prediction } from "@/lib/prediction/types";
 import type { PredictionHistoryRecord } from "@/lib/db/prediction-repository";
 import { UiIcon } from "./UiIcon";
@@ -10,16 +10,24 @@ export function ModelReferenceCard({prediction}:{prediction:Prediction|null}){
   const [open,setOpen]=useState(false);
   const [records,setRecords]=useState<PredictionHistoryRecord[]|null>(null);
   const [failed,setFailed]=useState(false);
-  const toggle=async()=>{
-    const next=!open;setOpen(next);
-    if(next&&records===null&&!failed){
-      try{
-        const response=await fetch("/api/prediction/history?limit=10&page=1",{cache:"no-store"});
-        const body=await response.json() as HistoryResponse;
-        if(!response.ok||!body.success)throw new Error("history unavailable");
-        setRecords(body.data?.records??[]);
-      }catch{setFailed(true);setRecords([])}
-    }
+  const loadHistory=useCallback(async()=>{
+    try{
+      const response=await fetch("/api/prediction/history?limit=10&page=1",{cache:"no-store"});
+      const body=await response.json() as HistoryResponse;
+      if(!response.ok||!body.success)throw new Error("history unavailable");
+      setRecords(body.data?.records??[]);
+      setFailed(false);
+    }catch{setFailed(true);setRecords(current=>current??[])}
+  },[]);
+  useEffect(()=>{
+    if(!open)return;
+    const timer=window.setInterval(()=>void loadHistory(),10_000);
+    return()=>window.clearInterval(timer);
+  },[open,loadHistory]);
+  const toggle=()=>{
+    const next=!open;
+    setOpen(next);
+    if(next)void loadHistory();
   };
   return <section className={`card model-card${open?" history-open":""}`} aria-label="预测结果">
     <div className="model-heading">

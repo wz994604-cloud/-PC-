@@ -40,13 +40,26 @@ export async function saveDrawsDetailed(draws: Draw[]): Promise<DrawSyncResult> 
       open_time:draw.openTime,raw_data:{rawOpenTime:draw.rawOpenTime},created_at:now,
     }));
     const inserted = await getNeonSql()`
+      WITH entries AS (
+        SELECT * FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS entry(
+          issue text,num1 integer,num2 integer,num3 integer,sum integer,big_small text,
+          odd_even text,pattern text,open_time text,raw_data jsonb,created_at text)
+      ), repaired AS (
+        UPDATE draw_results current SET
+          open_time=COALESCE(current.open_time,entries.open_time::timestamptz),
+          raw_data=COALESCE(current.raw_data,'{}'::jsonb)||COALESCE(entries.raw_data,'{}'::jsonb),
+          updated_at=entries.created_at::timestamptz
+        FROM entries
+        WHERE current.issue=entries.issue
+          AND (current.open_time IS NULL AND entries.open_time IS NOT NULL
+            OR COALESCE(current.raw_data->>'rawOpenTime','')='')
+        RETURNING current.issue
+      )
       INSERT INTO draw_results
         (issue,num1,num2,num3,sum,big_small,odd_even,pattern,open_time,source,raw_data,created_at,updated_at)
       SELECT issue,num1,num2,num3,sum,big_small,odd_even,pattern,
         open_time::timestamptz,'jnd',raw_data,created_at::timestamptz,created_at::timestamptz
-      FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS entry(
-        issue text,num1 integer,num2 integer,num3 integer,sum integer,big_small text,
-        odd_even text,pattern text,open_time text,raw_data jsonb,created_at text)
+      FROM entries
       ON CONFLICT(issue) DO NOTHING RETURNING issue`;
     return { inserted: inserted.length, duplicates: valid.length - inserted.length };
   }
