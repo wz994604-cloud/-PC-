@@ -9,7 +9,15 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const [result,stored] = await Promise.all([fetchSource(),getDrawHistory(100)]);
-    const history = stored.length ? stored : result.data.history;
+    const liveByIssue = new Map(result.data.history.map((draw) => [draw.issue,draw]));
+    const history = stored.length ? stored.map((draw) => {
+      const live = liveByIssue.get(draw.issue);
+      return live ? {
+        ...draw,
+        openTime:draw.openTime??live.openTime,
+        rawOpenTime:draw.rawOpenTime??live.rawOpenTime,
+      } : draw;
+    }) : result.data.history;
     const body: ApiSuccess = { success: true, data: { ...result.data, latest: history[0], history },
       meta: { source: stored.length ? "neon+jnd-schedule" : "jnd-fallback", updatedAt: new Date().toISOString(),
         timezone: "Asia/Phnom_Penh", warnings: result.warnings } };
