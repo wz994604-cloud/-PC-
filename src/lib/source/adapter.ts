@@ -8,10 +8,13 @@ import { upstreamResponseSchema, type UpstreamResponse } from "./schema";
 type RawDraw = UpstreamResponse["data"]["history"][number];
 const SOURCE_CLOCK_OFFSET_MS = 60 * 60 * 1000;
 
-function normalizeOpenTime(value: string | null | undefined, now: number) {
+function normalizeOpenTime(value: string | null | undefined, now: number, clockOffsetMs = 0) {
   const parsed = parseIso(value);
   if (!parsed) return { value: null, corrected: false };
-  const timestamp = Date.parse(parsed);
+  const timestamp = Date.parse(parsed) - clockOffsetMs;
+  if (clockOffsetMs && timestamp <= now + 60_000) {
+    return { value: new Date(timestamp).toISOString(), corrected: true };
+  }
   if (timestamp <= now + 60_000) return { value: parsed, corrected: false };
   const corrected = new Date(timestamp - SOURCE_CLOCK_OFFSET_MS).toISOString();
   return Date.parse(corrected) <= now + 60_000
@@ -19,20 +22,27 @@ function normalizeOpenTime(value: string | null | undefined, now: number) {
     : { value: null, corrected: false };
 }
 
-function normalizeDraw(raw: RawDraw, now: number): Draw {
+function normalizeDraw(raw: RawDraw, now: number, clockOffsetMs: number): Draw {
   const numbers: [number, number, number] = [raw.num1, raw.num2, raw.num3];
-  return { issue: raw.issue, numbers, ...calculateDraw(numbers), openTime: normalizeOpenTime(raw.openTime, now).value, rawOpenTime: raw.openTime ?? null, pattern: getDrawPattern(numbers) };
+  return { issue: raw.issue, numbers, ...calculateDraw(numbers), openTime: normalizeOpenTime(raw.openTime, now, clockOffsetMs).value, rawOpenTime: raw.openTime ?? null, pattern: getDrawPattern(numbers) };
 }
 
 export function normalizeSource(input: unknown, now = Date.now()): { data: DrawPayload; warnings: string[] } {
   const parsed = upstreamResponseSchema.safeParse(input);
   if (!parsed.success) throw new SourceError("INVALID_SOURCE_DATA", "上游开奖数据格式异常");
   const raw = parsed.data.data;
-  const latestTime = normalizeOpenTime(raw.openTime, now);
+  const rawLatestTime = parseIso(raw.openTime);
+  const rawLatestMs = rawLatestTime ? Date.parse(rawLatestTime) : NaN;
+  const clockOffsetMs = Number.isFinite(rawLatestMs)
+    && rawLatestMs > now + 60_000
+    && rawLatestMs - SOURCE_CLOCK_OFFSET_MS <= now + 60_000
+    ? SOURCE_CLOCK_OFFSET_MS
+    : 0;
+  const latestTime = normalizeOpenTime(raw.openTime, now, clockOffsetMs);
   const trustOpenTime = Boolean(latestTime.value);
-  const latest = normalizeDraw(raw, now);
+  const latest = normalizeDraw(raw, now, clockOffsetMs);
   const seen = new Set<string>();
-  const history = [latest, ...raw.history.map((draw) => normalizeDraw(draw, now))]
+  const history = [latest, ...raw.history.map((draw) => normalizeDraw(draw, now, clockOffsetMs))]
     .filter((draw) => !seen.has(draw.issue) && seen.add(draw.issue))
     .sort((a, b) => Number(b.issue) - Number(a.issue));
   const warnings: string[] = [];
