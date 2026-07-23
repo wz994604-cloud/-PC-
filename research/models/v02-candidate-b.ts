@@ -2,6 +2,19 @@ import { RESEARCH_CONFIG } from "../config";
 import type { ResearchDraw, ResearchModel } from "../types";
 import { normalize, shrink, theoreticalDistribution } from "./math";
 
+export type V02ModelWeights = {
+  theoretical: number;
+  frequency20: number;
+  frequency50: number;
+  frequency100: number;
+  frequency300: number;
+  normalizedOmission: number;
+  hotColdChange: number;
+  transition: number;
+  trendMomentumVolatility: number;
+  stateSignals: number;
+};
+
 const frequency = (history: readonly ResearchDraw[], window: number) => {
   const rows = history.slice(-window);
   const counts = Array(28).fill(0);
@@ -96,10 +109,17 @@ const stateShape = (history: readonly ResearchDraw[]) => {
   }));
 };
 
-export const v02CandidateB: ResearchModel = {
-  name: "v0.2-candidate-b",
+export function createV02Model(
+  name: string,
+  weights: V02ModelWeights,
+): ResearchModel {
+  const totalWeight = Object.values(weights).reduce((total, value) => total + value, 0);
+  if (totalWeight <= 0 || totalWeight > 1 + 1e-9) {
+    throw new Error(`${name}: weights must be within (0, 1] (received ${totalWeight})`);
+  }
+  return {
+  name,
   predict: ({ history }) => {
-    const weights = RESEARCH_CONFIG.v02CandidateB;
     const f20 = frequency(history, 20);
     const f50 = frequency(history, 50);
     const f100 = frequency(history, 100);
@@ -138,7 +158,7 @@ export const v02CandidateB: ResearchModel = {
     const probabilities = normalize(scores);
     const ranked = [...probabilities].sort((a, b) => b - a);
     return {
-      modelName: "v0.2-candidate-b",
+      modelName: name,
       scores,
       probabilities,
       confidence: ranked[0],
@@ -151,4 +171,10 @@ export const v02CandidateB: ResearchModel = {
       },
     };
   },
-};
+  };
+}
+
+export const v02CandidateB = createV02Model(
+  "v0.2-candidate-b",
+  RESEARCH_CONFIG.v02CandidateB,
+);

@@ -11,7 +11,10 @@ import {
   reconcileShadowPredictions,
   saveShadowPredictionOnce,
 } from "@/lib/db/shadow-prediction-repository";
-import { createV02ShadowPrediction } from "./v02-shadow";
+import {
+  createV02CalibrationPrediction,
+  createV02ShadowPrediction,
+} from "./v02-shadow";
 
 export type PredictionCycleResult = {
   prediction: PredictionHistoryRecord | null;
@@ -22,6 +25,11 @@ export type PredictionCycleResult = {
     targetIssue: string | null;
     inserted: boolean;
     reconciledCount: number;
+    error: boolean;
+  };
+  calibration: {
+    targetIssue: string | null;
+    inserted: boolean;
     error: boolean;
   };
 };
@@ -41,6 +49,11 @@ export async function runPredictionCycle(now = new Date().toISOString()): Promis
       reconciledCount: 0,
       error: false,
     };
+    let calibration: PredictionCycleResult["calibration"] = {
+      targetIssue: null,
+      inserted: false,
+      error: false,
+    };
     try {
       const shadowReconciled = await reconcileShadowPredictions(now);
       const shadowCandidate = createV02ShadowPrediction(history);
@@ -58,12 +71,33 @@ export async function runPredictionCycle(now = new Date().toISOString()): Promis
           reconciledCount: shadowReconciled.length,
         });
       }
+      const calibrationCandidate = createV02CalibrationPrediction(history);
+      if (calibrationCandidate) {
+        const saved = await saveShadowPredictionOnce(calibrationCandidate, now);
+        calibration = {
+          targetIssue: saved.targetIssue,
+          inserted: saved.inserted,
+          error: false,
+        };
+        logPredictionEvent(saved.inserted ? "calibration.saved" : "calibration.save_skipped", {
+          issue: saved.targetIssue,
+          modelVersion: calibrationCandidate.modelVersion,
+        });
+      }
     } catch (error) {
       shadow = { ...shadow, error: true };
+      calibration = { ...calibration, error: true };
       logPredictionEvent("shadow.failed", errorDetails(error));
     }
     if (!candidate) {
-      return { prediction: null, predictionInserted: false, reconciledCount: reconciled.length, reconciled, shadow };
+      return {
+        prediction: null,
+        predictionInserted: false,
+        reconciledCount: reconciled.length,
+        reconciled,
+        shadow,
+        calibration,
+      };
     }
 
     logPredictionEvent("prediction.generated", {
@@ -76,7 +110,14 @@ export async function runPredictionCycle(now = new Date().toISOString()): Promis
     const existing = await getPrediction(candidate.issue);
     if (existing) {
       logPredictionEvent("prediction.save_skipped", { issue: candidate.issue, reason: "duplicate_issue" });
-      return { prediction: existing, predictionInserted: false, reconciledCount: reconciled.length, reconciled, shadow };
+      return {
+        prediction: existing,
+        predictionInserted: false,
+        reconciledCount: reconciled.length,
+        reconciled,
+        shadow,
+        calibration,
+      };
     }
 
     try {
@@ -86,7 +127,14 @@ export async function runPredictionCycle(now = new Date().toISOString()): Promis
         predictedAt: saved.record.predictedAt,
         ...(saved.inserted ? {} : { reason: "duplicate_issue_race" }),
       });
-      return { prediction: saved.record, predictionInserted: saved.inserted, reconciledCount: reconciled.length, reconciled, shadow };
+      return {
+        prediction: saved.record,
+        predictionInserted: saved.inserted,
+        reconciledCount: reconciled.length,
+        reconciled,
+        shadow,
+        calibration,
+      };
     } catch (error) {
       logPredictionEvent("prediction.save_failed", { issue: candidate.issue, ...errorDetails(error) });
       throw error;

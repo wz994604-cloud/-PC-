@@ -5,6 +5,7 @@ export type PredictionLogEvent =
   | "prediction.generated" | "prediction.saved" | "prediction.save_skipped"
   | "prediction.reconciled" | "prediction.save_failed"
   | "shadow.saved" | "shadow.save_skipped" | "shadow.failed"
+  | "calibration.saved" | "calibration.save_skipped"
   | "database.error" | "prediction.cycle_failed";
 
 const forbidden=/secret|token|cookie|authorization|database_url|raw_data/i;

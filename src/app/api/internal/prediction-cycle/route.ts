@@ -47,6 +47,13 @@ async function execute(request:NextRequest){
         reconciledCount:cycle.shadow.reconciledCount,
         status:cycle.shadow.error?"error":cycle.shadow.targetIssue?"ready":"insufficient_data",
       },
+      calibrationPrediction:{
+        modelVersion:"v0.2-candidate-c",
+        created:cycle.calibration.inserted,
+        targetIssue:cycle.calibration.targetIssue,
+        duplicate:Boolean(cycle.calibration.targetIssue&&!cycle.calibration.inserted&&!cycle.calibration.error),
+        status:cycle.calibration.error?"error":cycle.calibration.targetIssue?"ready":"insufficient_data",
+      },
       data:{drawsInserted:sync.inserted,predictionIssue:cycle.prediction?.issue??null,
         predictionInserted:cycle.predictionInserted,reconciledCount:cycle.reconciled.length},
       timestamp:new Date().toISOString(),

@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.mjs",
-    "research:backtest": "node --import tsx research/cli.ts"
+    "research:backtest": "node --import tsx research/cli.ts",
+    "research:calibrate": "node --import tsx research/calibrate-cli.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

@@ -1,4 +1,8 @@
-import type { V02ShadowPrediction } from "@/lib/prediction/v02-shadow";
+import {
+  V02_CALIBRATION_MODEL_VERSION,
+  V02_SHADOW_MODEL_VERSION,
+  type V02ShadowPrediction,
+} from "@/lib/prediction/v02-shadow";
 import type { ConfidenceLabel, Prediction, ProbabilityPoint } from "@/lib/prediction/types";
 import { ensureNeonSchema, getNeonSql, hasNeonDatabase } from "./neon";
 import { getDatabase } from "./sqlite";
@@ -31,6 +35,9 @@ const theoreticalDistribution = (() => {
   for (let a = 0; a < 10; a++) for (let b = 0; b < 10; b++) for (let c = 0; c < 10; c++) counts[a + b + c]++;
   return counts.map((count) => count / 1000);
 })();
+type ShadowModelVersion =
+  | typeof V02_SHADOW_MODEL_VERSION
+  | typeof V02_CALIBRATION_MODEL_VERSION;
 
 function fromShadowRow(row: ShadowRow): ShadowPredictionRecord {
   const probabilities = parse(row.probability_distribution);
@@ -66,7 +73,7 @@ function fromShadowRow(row: ShadowRow): ShadowPredictionRecord {
     sampleSize: row.sample_size,
     weights: { theoretical: 0.2, recentFrequency: 0.45, omission: 0.1 },
     distribution,
-    modelVersion: "v0.2-candidate-b",
+    modelVersion: row.model_version as ShadowPredictionRecord["modelVersion"],
     top3: parse(row.top3),
     top5: parse(row.top5),
     status: row.status,
@@ -149,21 +156,27 @@ export async function reconcileShadowPredictions(
 
   const db = getDatabase();
   const rows = db.prepare(`
-    SELECT prediction.target_issue,draw.sum AS actual_sum,
+    SELECT prediction.target_issue,prediction.model_version,draw.sum AS actual_sum,
       CASE WHEN prediction.recommended_sum=draw.sum THEN 1 ELSE 0 END AS is_hit
     FROM prediction_shadow_history prediction
     JOIN draw_records draw ON draw.issue=prediction.target_issue
     WHERE prediction.status='pending'
-  `).all() as Array<{ target_issue: string; actual_sum: number; is_hit: number }>;
+  `).all() as Array<{ target_issue: string; model_version: string; actual_sum: number; is_hit: number }>;
   const update = db.prepare(`
     UPDATE prediction_shadow_history SET actual_sum=?,is_hit=?,status='settled',settled_at=?
-    WHERE target_issue=? AND model_version='v0.2-candidate-b' AND status='pending'
+    WHERE target_issue=? AND model_version=? AND status='pending'
   `);
   const settled: ShadowSettlement[] = [];
   db.exec("BEGIN");
   try {
     for (const row of rows) {
-      if (Number(update.run(row.actual_sum, row.is_hit, settledAt, row.target_issue).changes) === 1) {
+      if (Number(update.run(
+        row.actual_sum,
+        row.is_hit,
+        settledAt,
+        row.target_issue,
+        row.model_version,
+      ).changes) === 1) {
         settled.push({
           targetIssue: row.target_issue,
           actualSum: row.actual_sum,
@@ -179,26 +192,30 @@ export async function reconcileShadowPredictions(
   }
 }
 
-export async function getShadowPredictionCount() {
+export async function getShadowPredictionCount(
+  modelVersion: ShadowModelVersion = V02_SHADOW_MODEL_VERSION,
+) {
   if (hasNeonDatabase()) {
     await ensureNeonSchema();
     const rows = await getNeonSql()`
       SELECT COUNT(*)::integer AS count FROM prediction_shadow_records
-      WHERE model_version='v0.2-candidate-b'`;
+      WHERE model_version=${modelVersion}`;
     return Number((rows as Array<{ count: number }>)[0]?.count ?? 0);
   }
   const row = getDatabase().prepare(`
     SELECT COUNT(*) AS count FROM prediction_shadow_history
-    WHERE model_version='v0.2-candidate-b'`).get() as { count: number };
+    WHERE model_version=?`).get(modelVersion) as { count: number };
   return Number(row.count);
 }
 
-export async function getLatestShadowPrediction(): Promise<ShadowPredictionRecord | null> {
+export async function getLatestShadowPrediction(
+  modelVersion: ShadowModelVersion = V02_SHADOW_MODEL_VERSION,
+): Promise<ShadowPredictionRecord | null> {
   if (hasNeonDatabase()) {
     await ensureNeonSchema();
     const rows = await getNeonSql()`
       SELECT * FROM prediction_shadow_records
-      WHERE model_version='v0.2-candidate-b'
+      WHERE model_version=${modelVersion}
       ORDER BY target_issue::BIGINT DESC LIMIT 1` as ShadowRow[];
     return rows[0] ? fromShadowRow(rows[0]) : null;
   }
@@ -207,22 +224,26 @@ export async function getLatestShadowPrediction(): Promise<ShadowPredictionRecor
       top5_json AS top5,probability_distribution_json AS probability_distribution,
       confidence,diagnostics_json AS diagnostics,sample_size,status,generated_at,
       actual_sum,is_hit,settled_at
-    FROM prediction_shadow_history WHERE model_version='v0.2-candidate-b'
-    ORDER BY CAST(target_issue AS INTEGER) DESC LIMIT 1`).get() as ShadowRow | undefined;
+    FROM prediction_shadow_history WHERE model_version=?
+    ORDER BY CAST(target_issue AS INTEGER) DESC LIMIT 1`).get(modelVersion) as ShadowRow | undefined;
   return row ? fromShadowRow(row) : null;
 }
 
-export async function getShadowPredictionHistory(limit = 20, offset = 0) {
+export async function getShadowPredictionHistory(
+  limit = 20,
+  offset = 0,
+  modelVersion: ShadowModelVersion = V02_SHADOW_MODEL_VERSION,
+) {
   const take = Math.max(1, Math.min(100, Math.trunc(limit)));
   const skip = Math.max(0, Math.trunc(offset));
   if (hasNeonDatabase()) {
     await ensureNeonSchema();
     const db = getNeonSql();
     const [rows, counts] = await Promise.all([
-      db`SELECT * FROM prediction_shadow_records WHERE model_version='v0.2-candidate-b'
+      db`SELECT * FROM prediction_shadow_records WHERE model_version=${modelVersion}
         ORDER BY target_issue::BIGINT DESC LIMIT ${take} OFFSET ${skip}`,
       db`SELECT COUNT(*)::integer AS count FROM prediction_shadow_records
-        WHERE model_version='v0.2-candidate-b'`,
+        WHERE model_version=${modelVersion}`,
     ]);
     return {
       records: (rows as unknown as ShadowRow[]).map(fromShadowRow),
@@ -233,15 +254,17 @@ export async function getShadowPredictionHistory(limit = 20, offset = 0) {
   const selection = `SELECT target_issue,based_on_issue,model_version,recommended_sum,
     top3_json AS top3,top5_json AS top5,probability_distribution_json AS probability_distribution,
     confidence,diagnostics_json AS diagnostics,sample_size,status,generated_at,actual_sum,is_hit,settled_at
-    FROM prediction_shadow_history WHERE model_version='v0.2-candidate-b'`;
+    FROM prediction_shadow_history WHERE model_version=?`;
   const rows = db.prepare(`${selection} ORDER BY CAST(target_issue AS INTEGER) DESC LIMIT ? OFFSET ?`)
-    .all(take, skip) as ShadowRow[];
+    .all(modelVersion, take, skip) as ShadowRow[];
   const count = db.prepare(`SELECT COUNT(*) AS count FROM prediction_shadow_history
-    WHERE model_version='v0.2-candidate-b'`).get() as { count: number };
+    WHERE model_version=?`).get(modelVersion) as { count: number };
   return { records: rows.map(fromShadowRow), total: Number(count.count) };
 }
 
-export async function getCheckedShadowPredictions(): Promise<ShadowPredictionRecord[]> {
-  const { records } = await getShadowPredictionHistory(100, 0);
+export async function getCheckedShadowPredictions(
+  modelVersion: ShadowModelVersion = V02_SHADOW_MODEL_VERSION,
+): Promise<ShadowPredictionRecord[]> {
+  const { records } = await getShadowPredictionHistory(100, 0, modelVersion);
   return records.filter((record) => record.status === "settled");
 }

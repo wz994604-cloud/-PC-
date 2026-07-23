@@ -4,7 +4,10 @@ import { saveDraws } from "@/lib/db/draw-repository";
 import { getShadowPredictionCount } from "@/lib/db/shadow-prediction-repository";
 import { closeDatabaseForTests } from "@/lib/db/sqlite";
 import { runPredictionCycle } from "@/lib/prediction/cycle";
-import { createV02ShadowPrediction } from "@/lib/prediction/v02-shadow";
+import {
+  V02_CALIBRATION_MODEL_VERSION,
+  createV02ShadowPrediction,
+} from "@/lib/prediction/v02-shadow";
 import type { Draw } from "@/lib/draw/types";
 
 const draw = (issue: number, sum: number): Draw => ({
@@ -48,13 +51,16 @@ describe("v0.2 candidate B shadow cycle", () => {
     const duplicate = await runPredictionCycle("2026-01-01T00:01:00Z");
     expect(first.predictionInserted).toBe(true);
     expect(first.shadow).toMatchObject({ targetIssue: "121", inserted: true, error: false });
+    expect(first.calibration).toMatchObject({ targetIssue: "121", inserted: true, error: false });
     expect(duplicate.shadow).toMatchObject({ targetIssue: "121", inserted: false, error: false });
     expect(await getShadowPredictionCount()).toBe(1);
+    expect(await getShadowPredictionCount(V02_CALIBRATION_MODEL_VERSION)).toBe(1);
 
     await saveDraws([draw(121, first.prediction!.recommendedSum)]);
     const next = await runPredictionCycle("2026-01-01T00:03:30Z");
-    expect(next.shadow.reconciledCount).toBe(1);
+    expect(next.shadow.reconciledCount).toBe(2);
     expect(next.shadow.targetIssue).toBe("122");
     expect(await getShadowPredictionCount()).toBe(2);
+    expect(await getShadowPredictionCount(V02_CALIBRATION_MODEL_VERSION)).toBe(2);
   });
 });

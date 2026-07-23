@@ -2,16 +2,18 @@ import { NextResponse } from "next/server";
 import { getLatestShadowPrediction } from "@/lib/db/shadow-prediction-repository";
 import type { PredictionResponse } from "@/lib/prediction/types";
 import { errorDetails,logPredictionEvent } from "@/lib/observability/prediction-log";
+import { resolveV02ModelSelection } from "@/lib/prediction/model-selection";
 
 export const dynamic="force-dynamic";
 
 export async function GET(){
   const generatedAt=new Date().toISOString();
   try{
-    const prediction=await getLatestShadowPrediction();
+    const selection=await resolveV02ModelSelection();
+    const prediction=await getLatestShadowPrediction(selection.activeModelVersion);
     const body:PredictionResponse=prediction
-      ?{success:true,data:prediction,meta:{generatedAt}}
-      :{success:true,data:null,meta:{generatedAt,isAccumulating:true}};
+      ?{success:true,data:prediction,meta:{generatedAt,modelSelection:selection}}
+      :{success:true,data:null,meta:{generatedAt,isAccumulating:true,modelSelection:selection}};
     return NextResponse.json(body,{headers:{"Cache-Control":"no-store"}});
   }catch(error){
     logPredictionEvent("database.error",{route:"/api/prediction",...errorDetails(error)});
