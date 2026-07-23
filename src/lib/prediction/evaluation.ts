@@ -13,13 +13,22 @@ export type MetricSummary = {
 };
 
 export type PredictionEvaluation = MetricSummary & {
+  brierScore: number | null;
+  concentration: {
+    window: number;
+    mostRecommendedSum: number | null;
+    share: number | null;
+    warning: boolean;
+  };
   confidencePerformance: Array<{ confidenceLabel: ConfidenceLabel } & MetricSummary>;
 };
 
 const rate = (hits: number, total: number) => total ? hits / total : null;
+type EvaluationRecord = Pick<PredictionHistoryRecord,
+  "actualSum" | "recommendedSum" | "distribution" | "confidenceLabel">;
 
-function summarize(records: PredictionHistoryRecord[]): MetricSummary {
-  const checked = records.filter((record): record is PredictionHistoryRecord & { actualSum: number } => record.actualSum !== null);
+function summarize(records: EvaluationRecord[]): MetricSummary {
+  const checked = records.filter((record): record is EvaluationRecord & { actualSum: number } => record.actualSum !== null);
   let exactHits=0,top3Hits=0,top5Hits=0,absoluteError=0;
 
   for (const record of checked) {
@@ -42,13 +51,32 @@ function summarize(records: PredictionHistoryRecord[]): MetricSummary {
   };
 }
 
-export function evaluatePredictions(records: PredictionHistoryRecord[]): PredictionEvaluation {
+export function evaluatePredictions(records: EvaluationRecord[]): PredictionEvaluation {
   const labels:ConfidenceLabel[]=["低","中等","较高"];
   return {
     ...summarize(records),
+    brierScore: calculateBrier(records),
+    concentration: calculateConcentration(records),
     confidencePerformance:labels.map((confidenceLabel)=>({
       confidenceLabel,
       ...summarize(records.filter((record)=>record.confidenceLabel===confidenceLabel)),
     })),
   };
+}
+
+function calculateBrier(records: EvaluationRecord[]) {
+  const checked = records.filter((record): record is EvaluationRecord & { actualSum: number } => record.actualSum !== null);
+  if (!checked.length) return null;
+  return checked.reduce((total, record) => total + record.distribution.reduce((sum, point) =>
+    sum + (point.probability - Number(point.sum === record.actualSum)) ** 2, 0), 0) / checked.length;
+}
+
+function calculateConcentration(records: EvaluationRecord[]) {
+  const recent = records.slice(0, 50);
+  if (!recent.length) return { window: 0, mostRecommendedSum: null, share: null, warning: false };
+  const counts = new Map<number, number>();
+  recent.forEach((record) => counts.set(record.recommendedSum, (counts.get(record.recommendedSum) ?? 0) + 1));
+  const [mostRecommendedSum, count] = [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+  const share = count / recent.length;
+  return { window: recent.length, mostRecommendedSum, share, warning: recent.length >= 10 && share >= 0.5 };
 }

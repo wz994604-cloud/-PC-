@@ -34,7 +34,7 @@ export function Dashboard() {
       try {
         const predictionRes = await fetch("/api/prediction", { cache: "no-store", signal: predictionController.signal });
         const predictionBody = (await predictionRes.json()) as PredictionResponse;
-        setPrediction(predictionBody.success && predictionBody.data?.modelVersion === "v0.1 Beta" ? predictionBody.data : null);
+        setPrediction(predictionBody.success && isPrediction(predictionBody.data) ? predictionBody.data : null);
       } catch {
         setPrediction(null);
       } finally {
@@ -75,6 +75,15 @@ export function Dashboard() {
       ) : <State title="暂无开奖数据" />}
     </main>
   );
+}
+
+function isPrediction(value: unknown): value is Prediction {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<Prediction>;
+  return typeof candidate.issue === "string"
+    && typeof candidate.recommendedSum === "number"
+    && Array.isArray(candidate.distribution)
+    && candidate.distribution.length === 28;
 }
 
 function State({ title, detail, retry }: { title: string; detail?: string; retry?: () => void }) {

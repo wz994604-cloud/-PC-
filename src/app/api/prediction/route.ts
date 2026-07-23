@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLatestPrediction } from "@/lib/db/prediction-repository";
+import { getLatestShadowPrediction } from "@/lib/db/shadow-prediction-repository";
 import type { PredictionResponse } from "@/lib/prediction/types";
 import { errorDetails,logPredictionEvent } from "@/lib/observability/prediction-log";
 
@@ -8,7 +8,7 @@ export const dynamic="force-dynamic";
 export async function GET(){
   const generatedAt=new Date().toISOString();
   try{
-    const prediction=await getLatestPrediction();
+    const prediction=await getLatestShadowPrediction();
     const body:PredictionResponse=prediction
       ?{success:true,data:prediction,meta:{generatedAt}}
       :{success:true,data:null,meta:{generatedAt,isAccumulating:true}};

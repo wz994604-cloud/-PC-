@@ -31,6 +31,10 @@ export function createV02ShadowPrediction(draws: Draw[]): V02ShadowPrediction | 
   const ranked = prediction.probabilities
     .map((probability, sum) => ({ sum, probability }))
     .sort((a, b) => b.probability - a.probability || a.sum - b.sum);
+  const recent = ordered.slice(-300);
+  const counts = Array<number>(28).fill(0);
+  recent.forEach((draw) => counts[draw.sum]++);
+  const recentFrequency = counts.map((count) => count / Math.max(1, recent.length));
 
   return {
     targetIssue: String(Number(latest.issue) + 1),
@@ -41,7 +45,7 @@ export function createV02ShadowPrediction(draws: Draw[]): V02ShadowPrediction | 
     top5: ranked.slice(0, 5).map(({ sum }) => sum),
     probabilityDistribution: prediction.probabilities,
     confidence: prediction.confidence,
-    diagnostics: prediction.diagnostics ?? {},
+    diagnostics: { ...(prediction.diagnostics ?? {}), recentFrequency },
     sampleSize: ordered.length,
   };
 }
