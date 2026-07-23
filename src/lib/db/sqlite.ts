@@ -52,6 +52,27 @@ function migrate(db: DatabaseSync) {
       checked_at TEXT
     );
     CREATE INDEX IF NOT EXISTS prediction_history_issue_desc ON prediction_history(issue DESC);
+    CREATE TABLE IF NOT EXISTS prediction_shadow_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_issue TEXT NOT NULL,
+      based_on_issue TEXT NOT NULL,
+      model_version TEXT NOT NULL,
+      recommended_sum INTEGER NOT NULL CHECK(recommended_sum BETWEEN 0 AND 27),
+      top3_json TEXT NOT NULL,
+      top5_json TEXT NOT NULL,
+      probability_distribution_json TEXT NOT NULL,
+      confidence REAL NOT NULL,
+      diagnostics_json TEXT NOT NULL,
+      sample_size INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending','settled')),
+      actual_sum INTEGER CHECK(actual_sum BETWEEN 0 AND 27),
+      is_hit INTEGER CHECK(is_hit IN (0,1)),
+      generated_at TEXT NOT NULL,
+      settled_at TEXT,
+      UNIQUE(target_issue,model_version)
+    );
+    CREATE INDEX IF NOT EXISTS prediction_shadow_issue_desc
+      ON prediction_shadow_history(target_issue DESC);
   `);
 }
 
