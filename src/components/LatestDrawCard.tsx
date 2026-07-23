@@ -10,14 +10,16 @@ export function LatestDrawCard({ response }: { response: ApiSuccess; sourceUnava
   const [searchedIssue, setSearchedIssue] = useState<string | null>(null);
 
   useEffect(() => {
-    const update = () => setNow(Date.now());
+    const serverUpdatedAt = Date.parse(response.meta.updatedAt);
+    const serverClockOffset = Number.isFinite(serverUpdatedAt) ? serverUpdatedAt - Date.now() : 0;
+    const update = () => setNow(Date.now() + serverClockOffset);
     const first = window.setTimeout(update, 0);
     const id = window.setInterval(update, 1000);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(id);
     };
-  }, []);
+  }, [response.meta.updatedAt]);
 
   const left = countdownParts(nextOpenTime, now);
   return (
