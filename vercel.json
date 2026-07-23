@@ -1,6 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "env": {
-    "DATABASE_PATH": "/tmp/28live.sqlite"
-  }
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }

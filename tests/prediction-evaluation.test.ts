@@ -27,12 +27,15 @@ describe("prediction evaluation",()=>{
     expect(result.top3HitRate).toBeCloseTo(2/3);
     expect(result.top5HitRate).toBeCloseTo(2/3);
     expect(result.meanAbsoluteError).toBeCloseTo((0+Math.abs(top3.recommendedSum-top3.actualSum!)+Math.abs(miss.recommendedSum-miss.actualSum!))/3);
+    expect(result.brierScore).not.toBeNull();
+    expect(result.concentration.window).toBe(4);
     expect(result.confidencePerformance.find((group)=>group.confidenceLabel==="中等")?.sampleSize).toBe(2);
     expect(result.confidencePerformance.find((group)=>group.confidenceLabel==="低")?.sampleSize).toBe(0);
   });
 
   it("returns null rates before any prediction is checked",()=>{
     const result=evaluatePredictions([]);
-    expect(result).toMatchObject({sampleSize:0,exactHitRate:null,top3HitRate:null,top5HitRate:null,meanAbsoluteError:null});
+    expect(result).toMatchObject({sampleSize:0,exactHitRate:null,top3HitRate:null,top5HitRate:null,
+      meanAbsoluteError:null,brierScore:null,concentration:{window:0,warning:false}});
   });
 });

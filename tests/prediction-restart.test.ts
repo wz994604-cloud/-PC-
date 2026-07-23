@@ -14,16 +14,16 @@ const draw=(issue:string):Draw=>({issue,numbers:[4,5,5],sum:14,bigSmall:"大",od
 afterEach(()=>{closeDatabaseForTests();delete process.env.DATABASE_PATH;for(const directory of directories.splice(0))rmSync(directory,{recursive:true,force:true})});
 
 describe("prediction storage restart",()=>{
-  it("continues accumulation after reopening the same SQLite file",()=>{
+  it("continues accumulation after reopening the same SQLite file",async()=>{
     const directory=mkdtempSync(join(tmpdir(),"28live-restart-"));directories.push(directory);
     process.env.DATABASE_PATH=join(directory,"prediction.sqlite");
-    saveDraws([draw("100")]);
-    runPredictionCycle("2026-01-01T00:00:00Z");
+    await saveDraws([draw("100")]);
+    await runPredictionCycle("2026-01-01T00:00:00Z");
     closeDatabaseForTests();
 
-    expect(getPredictionHistory().total).toBe(1);
-    saveDraws([draw("101")]);
-    runPredictionCycle("2026-01-01T00:04:00Z");
-    expect(getPredictionHistory().records.map((record)=>record.issue)).toEqual(["102","101"]);
+    expect((await getPredictionHistory()).total).toBe(1);
+    await saveDraws([draw("101")]);
+    await runPredictionCycle("2026-01-01T00:04:00Z");
+    expect((await getPredictionHistory()).records.map((record)=>record.issue)).toEqual(["102","101"]);
   });
 });

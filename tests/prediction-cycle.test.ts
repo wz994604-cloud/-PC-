@@ -12,24 +12,24 @@ beforeEach(()=>{process.env.DATABASE_PATH=":memory:";closeDatabaseForTests()});
 afterEach(()=>{vi.restoreAllMocks();closeDatabaseForTests();delete process.env.DATABASE_PATH});
 
 describe("automatic prediction cycle",()=>{
-  it("solidifies every next issue, reconciles the draw and remains idempotent",()=>{
+  it("solidifies every next issue, reconciles the draw and remains idempotent",async()=>{
     const info=vi.spyOn(console,"info").mockImplementation(()=>undefined);
-    saveDraws([draw("10",14)]);
+    await saveDraws([draw("10",14)]);
 
-    const first=runPredictionCycle("2026-01-01T00:00:00Z");
-    const duplicate=runPredictionCycle("2026-01-01T00:01:00Z");
+    const first=await runPredictionCycle("2026-01-01T00:00:00Z");
+    const duplicate=await runPredictionCycle("2026-01-01T00:01:00Z");
     expect(first.prediction?.issue).toBe("11");
     expect(first.predictionInserted).toBe(true);
     expect(duplicate.predictionInserted).toBe(false);
-    expect(getPredictionHistory().total).toBe(1);
+    expect((await getPredictionHistory()).total).toBe(1);
 
-    saveDraws([draw("11",first.prediction!.recommendedSum)]);
-    const next=runPredictionCycle("2026-01-01T00:03:30Z");
+    await saveDraws([draw("11",first.prediction!.recommendedSum)]);
+    const next=await runPredictionCycle("2026-01-01T00:03:30Z");
     expect(next.reconciledCount).toBe(1);
     expect(next.prediction?.issue).toBe("12");
     expect(next.predictionInserted).toBe(true);
 
-    const records=getPredictionHistory().records;
+    const records=(await getPredictionHistory()).records;
     expect(records).toHaveLength(2);
     expect(records.find((record)=>record.issue==="11")).toMatchObject({
       actualSum:first.prediction!.recommendedSum,

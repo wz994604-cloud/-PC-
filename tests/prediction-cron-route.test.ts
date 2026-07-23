@@ -30,6 +30,6 @@ describe("prediction cron route",()=>{
     const response=await GET(new NextRequest("http://localhost/api/internal/prediction-cycle",{headers:{authorization:"Bearer expected"}}));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({success:true,data:{predictionIssue:"101",predictionInserted:true}});
-    expect(getPredictionHistory().records.map((record)=>record.issue)).toEqual(["101"]);
+    expect((await getPredictionHistory()).records.map((record)=>record.issue)).toEqual(["101"]);
   });
 });

@@ -11,9 +11,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.mjs",
-    "research:backtest": "node --import tsx research/cli.ts"
+    "research:backtest": "node --import tsx research/cli.ts",
+    "research:calibrate": "node --import tsx research/calibrate-cli.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.2",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",

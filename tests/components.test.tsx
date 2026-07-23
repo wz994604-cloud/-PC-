@@ -7,11 +7,23 @@ import type { ApiSuccess } from "@/lib/draw/types";
 const historical = {issue:"3459844",numbers:[1,1,2] as [number,number,number],sum:4,bigSmall:"小" as const,oddEven:"双" as const,openTime:"2026-07-21T08:00:00Z",rawOpenTime:null,pattern:"对子" as const};
 const response: ApiSuccess = {success:true,data:{latest:{issue:"3459845",numbers:[1,2,3],sum:6,bigSmall:"小",oddEven:"双",openTime:null,rawOpenTime:"raw",pattern:"顺子"},history:[historical],nextOpenTime:null,rawNextOpenTime:"raw"},meta:{source:"jnd",updatedAt:"2026-07-21T00:00:00Z",timezone:"Asia/Phnom_Penh",warnings:["time"]}};
 
-afterEach(()=>{cleanup();vi.restoreAllMocks()});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.useRealTimers()});
 
 describe("components",()=>{
   it("renders empty history",()=>{render(<DrawHistory draws={[]}/>);expect(screen.getByText("暂无历史数据")).toBeInTheDocument()});
   it("shows drawing when countdown is unavailable",()=>{render(<LatestDrawCard response={response}/>);expect(screen.getByText("开奖中")).toBeInTheDocument()});
+  it("uses the API server clock for the next-draw countdown",async()=>{
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-07-21T12:00:00Z");
+    const clockResponse: ApiSuccess = {
+      ...response,
+      data:{...response.data,nextOpenTime:"2026-07-21T08:03:30Z"},
+      meta:{...response.meta,updatedAt:"2026-07-21T08:01:00Z"},
+    };
+    render(<LatestDrawCard response={clockResponse}/>);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByLabelText("下一期开奖倒计时")).toHaveTextContent("02:30");
+  });
   it("removes every scratch-card entry point",()=>{
     const view=render(<LatestDrawCard response={response}/>);
     expect(view.queryByText("咪牌")).not.toBeInTheDocument();
@@ -21,7 +33,7 @@ describe("components",()=>{
   it("renders the static model sections with live draw data",async()=>{
     vi.stubGlobal("fetch",vi.fn(async()=>({json:async()=>response})));
     render(<Dashboard/>);
-    expect(await screen.findByRole("heading",{name:"模型参考结果"})).toBeInTheDocument();
+    expect(await screen.findByRole("heading",{name:"预测结果"})).toBeInTheDocument();
     expect(screen.getByRole("img",{name:"和值0到27概率分布"})).toBeInTheDocument();
     const analysis=screen.getByRole("button",{name:/分析依据/});
     expect(analysis).toHaveAttribute("aria-expanded","false");

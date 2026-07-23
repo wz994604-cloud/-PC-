@@ -2,19 +2,25 @@ import { NextResponse } from "next/server";
 import { fetchSource } from "@/lib/source/adapter";
 import { SourceError } from "@/lib/source/errors";
 import type { ApiFailure, ApiSuccess } from "@/lib/draw/types";
-import { getDrawHistory, saveDraws } from "@/lib/db/draw-repository";
-import { runPredictionCycle } from "@/lib/prediction/cycle";
+import { getDrawHistory } from "@/lib/db/draw-repository";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const result = await fetchSource();
-    saveDraws(result.data.history);
-    runPredictionCycle();
-    const storedHistory = getDrawHistory(300);
-    result.data.history = storedHistory;
-    const body: ApiSuccess = { success: true, data: result.data, meta: { source: "jnd", updatedAt: new Date().toISOString(), timezone: "Asia/Phnom_Penh", warnings: result.warnings } };
+    const [result,stored] = await Promise.all([fetchSource(),getDrawHistory(100)]);
+    const liveByIssue = new Map(result.data.history.map((draw) => [draw.issue,draw]));
+    const history = stored.length ? stored.map((draw) => {
+      const live = liveByIssue.get(draw.issue);
+      return live ? {
+        ...draw,
+        openTime:draw.openTime??live.openTime,
+        rawOpenTime:draw.rawOpenTime??live.rawOpenTime,
+      } : draw;
+    }) : result.data.history;
+    const body: ApiSuccess = { success: true, data: { ...result.data, latest: history[0], history },
+      meta: { source: stored.length ? "neon+jnd-schedule" : "jnd-fallback", updatedAt: new Date().toISOString(),
+        timezone: "Asia/Phnom_Penh", warnings: result.warnings } };
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const sourceError = error instanceof SourceError ? error : new SourceError("SOURCE_UNAVAILABLE", "开奖数据暂时不可用");
