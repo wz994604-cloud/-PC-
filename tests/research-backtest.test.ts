@@ -1,7 +1,7 @@
 import { describe,expect,it } from "vitest";
 import { validateDraws,sortDraws } from "../research/data/validate";
 import { walkForward } from "../research/backtest/walk-forward";
-import { theoreticalBaseline,v01Model,v02CandidateA } from "../research/models";
+import { theoreticalBaseline,v01Model,v02CandidateA,v02CandidateB } from "../research/models";
 import type { ResearchDraw,ResearchModel } from "../research/types";
 import { RESEARCH_CONFIG } from "../research/config";
 
@@ -14,6 +14,7 @@ describe("offline walk-forward research",()=>{
  it("shrinks and disables unreliable features for small samples",()=>{const prediction=v02CandidateA.predict({history:rows(10)});expect(prediction.diagnostics).toMatchObject({transitionEnabled:false,trendEnabled:false});expect(prediction.diagnostics?.effectiveTheoreticalWeight).toBeGreaterThan(RESEARCH_CONFIG.v02CandidateA.theoretical)});
  it("caps extreme omission ratios",()=>{const prediction=v02CandidateA.predict({history:rows(20).map((d,i)=>({...d,sum:i%2?13:14,numbers:i%2?[4,4,5]:[4,5,5]} as ResearchDraw))});expect(Math.max(...prediction.diagnostics!.omissionRatios as number[])).toBeLessThanOrEqual(RESEARCH_CONFIG.omissionRatioCap)});
  it("keeps sparse transition probabilities non-extreme",()=>{const prediction=v02CandidateA.predict({history:rows(100)});expect(Math.max(...prediction.probabilities)).toBeLessThan(.2)});
+ it("keeps candidate B calibrated and caps normalized omission",()=>{const prediction=v02CandidateB.predict({history:rows(120)});expect(Math.max(...prediction.diagnostics!.omissionRatios as number[])).toBeLessThanOrEqual(2);expect(prediction.confidence).toBe(Math.max(...prediction.probabilities));expect(prediction.diagnostics!.effectiveTheoreticalWeight).toBeGreaterThanOrEqual(.35)});
  it("is deterministic",()=>expect(v02CandidateA.predict({history:rows(120)})).toEqual(v02CandidateA.predict({history:rows(120)})));
  it("matches the online v0.1 implementation",()=>{const history=rows(12),prediction=v01Model.predict({history});expect(prediction.diagnostics).toMatchObject({onlineModelVersion:"v0.1 Beta"});expect(prediction.probabilities.reduce((a,b)=>a+b,0)).toBeCloseTo(1)});
  it("supports expanding and fixed rolling windows",()=>{expect(walkForward(rows(8),[theoreticalBaseline],{warmup:3,mode:"expanding"}).at(-1)?.trainingSize).toBe(7);expect(walkForward(rows(8),[theoreticalBaseline],{warmup:3,mode:"rolling",rollingWindow:4}).at(-1)?.trainingSize).toBe(4)});

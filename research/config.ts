@@ -14,6 +14,12 @@ export const RESEARCH_CONFIG = {
     frequency100: 0.12, normalizedOmission: 0.12, hotColdChange: 0.07,
     transition: 0.04, trendMomentumVolatility: 0.03, stateSignals: 0.02,
   },
+  v02CandidateB: {
+    theoretical: 0.35, frequency20: 0.08, frequency50: 0.12,
+    frequency100: 0.1, frequency300: 0.06, normalizedOmission: 0.06,
+    hotColdChange: 0.05, transition: 0.03,
+    trendMomentumVolatility: 0.04, stateSignals: 0.02,
+  },
 } as const;
 
 export type ResearchConfig = typeof RESEARCH_CONFIG;
